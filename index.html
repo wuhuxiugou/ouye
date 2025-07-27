@@ -2,2086 +2,1495 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>生产统计系统</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>水站水桶管理系统</title>
     <style>
+        :root {
+            --primary: #4285f4;
+            --primary-dark: #3367d6;
+            --secondary: #34a853;
+            --danger: #ea4335;
+            --warning: #fbbc05;
+            --light: #f8f9fa;
+            --dark: #202124;
+            --gray: #5f6368;
+            --border: #dadce0;
+            --card-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            -webkit-tap-highlight-color: transparent;
         }
-        
-        :root {
-            --primary-color: #1a2a6c;
-            --secondary-color: #b21f1f;
-            --accent-color: #8338ec;
-            --text-color: #2d3748;
-            --light-text: #718096;
-            --bg-color: #f8fafc;
-            --card-bg: #ffffff;
-            --border-radius: 16px;
-            --box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-            --nav-height: 70px;
-            --side-nav-width: 90px;
-            --success-color: #38b2ac;
-            --warning-color: #ffb142;
-            --danger-color: #ff5252;
-        }
-        
+
         body {
-            background: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
-            min-height: 100vh;
-            -webkit-text-size-adjust: 100%;
-            overflow-x: hidden;
+            font-family: 'Roboto', 'Noto Sans SC', sans-serif;
+            line-height: 1.5;
+            background-color: #f1f3f4;
+            color: var(--dark);
+            padding: 16px;
         }
-        
-        /* 启动画面 */
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.5s ease-out;
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
         }
-        
-        #splash-screen h1 {
-            color: white;
-            font-size: 2.2rem;
-            margin-top: 20px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+
+        @media (min-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr 1fr;
+                grid-template-areas:
+                    "header header"
+                    "outgoing stats"
+                    "inventory broken"
+                    "machine machine"
+                    "records records";
+            }
+
+            .header { grid-area: header; }
+            .inventory-card { grid-area: inventory; }
+            .outgoing-card { grid-area: outgoing; }
+            .stats-card { grid-area: stats; }
+            .broken-card { grid-area: broken; }
+            .machine-card { grid-area: machine; }
+            .records-section { grid-area: records; }
         }
-        
-        #splash-screen p {
-            color: rgba(255,255,255,0.9);
-            margin-top: 10px;
-            font-size: 1.1rem;
-        }
-        
-        .splash-logo {
-            width: 100px;
-            height: 100px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: pulse 2s infinite;
-        }
-        
-        .splash-logo i {
-            font-size: 3.5rem;
-            color: white;
-        }
-        
-        /* 启动进度条 */
-        .splash-progress {
-            width: 80%;
-            max-width: 300px;
-            height: 8px;
-            background: rgba(255,255,255,0.3);
-            border-radius: 4px;
-            margin-top: 30px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .splash-progress-bar {
-            height: 100%;
-            width: 0%;
+
+        .card {
             background: white;
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-        
-        .splash-status {
-            color: rgba(255,255,255,0.8);
-            margin-top: 15px;
-            font-size: 0.9rem;
-            text-align: center;
-            min-height: 1.5em;
-        }
-        
-        /* 离线状态提示 */
-        #offline-status {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: #ff9800;
-            color: white;
-            text-align: center;
-            padding: 12px;
-            font-size: 0.9rem;
-            z-index: 1000;
-            transform: translateY(-100%);
-            transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-        
-        #offline-status.show {
-            transform: translateY(0);
-        }
-        
-        /* 通知提示样式 */
-        #notification {
-            position: fixed;
-            bottom: 25px;
-            right: 25px;
-            background: #4CAF50;
-            color: white;
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-            z-index: 1000;
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            max-width: 350px;
-            font-size: 0.95rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        #notification.show {
-            transform: translateY(0);
-            opacity: 1;
-        }
-        
-        #notification.error {
-            background: var(--danger-color);
-        }
-        
-        #notification.warning {
-            background: var(--warning-color);
-        }
-        
-        #notification.info {
-            background: #2d98da;
-        }
-        
-        /* 主容器布局 */
-        .main-container {
-            display: flex;
-            min-height: 100vh;
-        }
-        
-        /* PC端侧边导航 */
-        .side-nav {
-            display: none; /* 默认隐藏 */
-            flex-direction: column;
-            position: fixed;
-            left: 0;
-            top: 0;
-            height: 100vh;
-            width: var(--side-nav-width);
-            background: linear-gradient(180deg, var(--primary-color), var(--secondary-color));
-            box-shadow: 4px 0 20px rgba(0,0,0,0.1);
-            z-index: 100;
-            padding-top: 20px;
-        }
-        
-        .side-nav-item {
-            padding: 22px 10px;
-            text-align: center;
-            color: rgba(255,255,255,0.7);
-            transition: all 0.3s ease;
-            text-decoration: none;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .side-nav-item::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 0;
-            background: white;
-            transition: height 0.3s ease;
-        }
-        
-        .side-nav-item.active {
-            color: white;
-            background: rgba(255,255,255,0.15);
-        }
-        
-        .side-nav-item.active::before {
-            height: 100%;
-        }
-        
-        .side-nav-item i {
-            font-size: 1.8rem;
-            margin-bottom: 8px;
-            display: block;
-            transition: transform 0.3s;
-        }
-        
-        .side-nav-item:hover i {
-            transform: translateY(-3px);
-        }
-        
-        .side-nav-item span {
-            font-size: 0.8rem;
-            font-weight: 500;
-        }
-        
-        /* 应用内容区域 */
-        .app-content {
-            flex: 1;
+            border-radius: 8px;
+            box-shadow: var(--card-shadow);
             padding: 20px;
-            transition: margin-left 0.3s;
-            min-height: 100vh;
+            transition: var(--transition);
         }
-        
-        /* 顶部标题栏 */
-        .app-header {
+
+        .card:hover {
+            box-shadow: 0 1px 3px 0 rgba(60,64,67,0.4), 0 4px 8px 3px rgba(60,64,67,0.15);
+        }
+
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 0;
             margin-bottom: 20px;
-            position: sticky;
-            top: 0;
-            background: var(--bg-color);
-            z-index: 10;
-        }
-        
-        .app-header h1 {
-            font-size: 1.8rem;
-            color: var(--primary-color);
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .header-actions {
-            display: flex;
-            gap: 12px;
-        }
-        
-        /* 卡片样式 */
-        .card {
-            background: var(--card-bg);
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-            padding: 24px;
-            margin-bottom: 20px;
-            transition: transform 0.3s, box-shadow 0.3s;
-            animation: cardAppear 0.6s ease-out;
-            transform-origin: top center;
-            opacity: 0;
-            animation-fill-mode: forwards;
-        }
-        
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
-        }
-        
-        .card:nth-child(1) { animation-delay: 0.1s; }
-        .card:nth-child(2) { animation-delay: 0.2s; }
-        .card:nth-child(3) { animation-delay: 0.3s; }
-        .card:nth-child(4) { animation-delay: 0.4s; }
-        
-        .card h2 {
-            color: var(--primary-color);
-            font-size: 1.4rem;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
             padding-bottom: 12px;
-            border-bottom: 1px solid rgba(26, 42, 108, 0.1);
+            border-bottom: 1px solid var(--border);
         }
-        
-        .card h2 i {
-            color: var(--secondary-color);
-            font-size: 1.6rem;
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--dark);
         }
-        
-        /* 表单元素 */
+
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
-        
-        .form-group label {
+
+        label {
             display: block;
             margin-bottom: 8px;
-            font-size: 0.95rem;
-            color: var(--text-color);
+            font-size: 14px;
             font-weight: 500;
+            color: var(--dark);
         }
-        
-        .form-control {
+
+        input, select {
             width: 100%;
-            padding: 14px 18px;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            font-size: 1rem;
-            background: #f9fafb;
-            -webkit-appearance: none;
-            transition: all 0.3s;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: var(--transition);
         }
-        
-        .form-control:focus {
-            border-color: var(--primary-color);
+
+        input:focus, select:focus {
             outline: none;
-            background: #fff;
-            box-shadow: 0 0 0 3px rgba(26, 42, 108, 0.15);
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(66,133,244,0.2);
         }
-        
-        /* 产品名称输入组 */
-        .product-name-group {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .product-name-group .form-control {
-            flex: 1;
-        }
-        
-        .product-name-group .btn-sm {
-            width: auto;
-            padding: 0 12px;
-        }
-        
-        /* 时间输入样式 */
-        .time-input-group {
-            display: flex;
-            gap: 12px;
-        }
-        
-        .time-input-group .form-control {
-            flex: 1;
-        }
-        
-        /* 按钮样式 */
+
         .btn {
-            display: inline-block;
-            padding: 16px;
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.05rem;
-            font-weight: 600;
-            text-align: center;
-            cursor: pointer;
-            width: 100%;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .btn::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: 0.6s;
-        }
-        
-        .btn:hover::after {
-            left: 100%;
-        }
-        
-        .btn-sm {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 10px 16px;
-            font-size: 0.9rem;
-            width: auto;
-            border-radius: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
         }
-        
-        .btn-outline {
-            background: transparent;
-            border: 2px solid var(--primary-color);
-            color: var(--primary-color);
-            font-weight: 600;
+
+        .btn-block {
+            display: flex;
+            width: 100%;
         }
-        
-        .btn-outline:hover {
-            background: rgba(26, 42, 108, 0.08);
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
         }
-        
-        /* 统计卡片 */
-        .stats-container {
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .btn-success {
+            background-color: var(--secondary);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-warning {
+            background-color: var(--warning);
+            color: var(--dark);
+        }
+
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
             gap: 16px;
             margin-bottom: 20px;
         }
-        
+
         .stat-card {
-            background: var(--card-bg);
-            border-radius: var(--border-radius);
-            padding: 20px;
-            text-align: center;
-            box-shadow: var(--box-shadow);
-            transition: transform 0.3s;
-            animation: statCardAppear 0.5s ease-out;
-            opacity: 0;
-            animation-fill-mode: forwards;
-        }
-        
-        .stat-card:nth-child(1) { animation-delay: 0.15s; }
-        .stat-card:nth-child(2) { animation-delay: 0.25s; }
-        .stat-card:nth-child(3) { animation-delay: 0.35s; }
-        .stat-card:nth-child(4) { animation-delay: 0.45s; }
-        
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .stat-card i {
-            font-size: 2.2rem;
-            color: var(--primary-color);
-            margin-bottom: 14px;
-            background: rgba(26, 42, 108, 0.1);
-            width: 70px;
-            height: 70px;
-            line-height: 70px;
-            border-radius: 50%;
-            margin: 0 auto 15px;
-        }
-        
-        .stat-card h3 {
-            font-size: 1.8rem;
-            margin-bottom: 5px;
-            color: var(--secondary-color);
-            font-weight: 700;
-        }
-        
-        .stat-card p {
-            color: var(--light-text);
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-        
-        /* 进度条 */
-        .progress-container {
-            width: 100%;
-            background-color: #edf2f7;
-            border-radius: 12px;
-            margin: 15px 0;
-            height: 18px;
-            overflow: hidden;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            border-radius: 12px;
-            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-            text-align: center;
-            line-height: 18px;
-            color: white;
-            font-size: 0.75rem;
-            font-weight: 600;
-            transition: width 0.6s cubic-bezier(0.22, 0.61, 0.36, 1);
-            box-shadow: 0 2px 10px rgba(26, 42, 108, 0.3);
-        }
-        
-        /* 加班时间样式 */
-        .overtime-info {
-            background: #f9fafb;
-            border-radius: 12px;
+            background: white;
+            border-radius: 8px;
             padding: 16px;
-            margin-top: 20px;
-            border: 1px solid #edf2f7;
+            text-align: center;
+            box-shadow: var(--card-shadow);
         }
-        
-        .overtime-info h3 {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-            color: var(--primary-color);
+
+        .stat-title {
+            font-size: 13px;
+            color: var(--gray);
+            margin-bottom: 8px;
         }
-        
-        .overtime-info h3 i {
-            color: var(--secondary-color);
-        }
-        
-        .overtime-details {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.9rem;
-            color: var(--light-text);
+
+        .stat-value {
+            font-size: 24px;
             font-weight: 500;
         }
-        
-        .overtime-value {
-            color: var(--danger-color);
-            font-weight: 600;
+
+        .table-container {
+            overflow-x: auto;
+            margin-top: 16px;
         }
-        
-        /* 差异显示样式 */
-        .over-target {
-            color: var(--success-color);
-            font-weight: bold;
-        }
-        
-        .under-target {
-            color: var(--danger-color);
-            font-weight: bold;
-        }
-        
-        .target-met {
-            color: #2d98da;
-            font-weight: bold;
-        }
-        
-        /* 历史记录表格 */
-        .work-history {
-            background: var(--card-bg);
-            border-radius: var(--border-radius);
-            padding: 20px;
-            box-shadow: var(--box-shadow);
-            margin-bottom: 25px;
-            animation: fadeIn 0.5s ease-out;
-        }
-        
-        .history-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .history-header h2 {
-            font-size: 1.4rem;
-            color: var(--primary-color);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-        }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.95rem;
+            font-size: 14px;
         }
-        
+
         th, td {
-            padding: 14px 12px;
+            padding: 12px 16px;
             text-align: left;
-            border-bottom: 1px solid #edf2f7;
+            border-bottom: 1px solid var(--border);
         }
-        
+
         th {
-            background-color: #f8fafc;
-            color: var(--primary-color);
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        
-        .date-row {
-            cursor: pointer;
-            background-color: #f8fafc !important;
-            transition: background-color 0.2s;
-        }
-        
-        .date-row:hover {
-            background-color: #f1f5f9 !important;
-        }
-        
-        .detail-row {
-            display: none;
-        }
-        
-        /* 详细记录表格样式 */
-        .detail-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            background: #f9fafb;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        
-        .detail-table th {
-            background-color: #edf2f7;
-            padding: 12px 16px;
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: var(--primary-color);
-        }
-        
-        .detail-table td {
-            padding: 12px 16px;
-            border-bottom: 1px solid #e2e8f0;
-            vertical-align: middle;
-        }
-        
-        .detail-table tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .detail-actions {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            height: 100%;
-        }
-        
-        .detail-delete-btn {
-            background: none;
-            border: none;
-            color: #ff5252;
-            cursor: pointer;
-            font-size: 0.95rem;
-            padding: 6px 12px;
-            border-radius: 8px;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            background-color: var(--light);
             font-weight: 500;
+            color: var(--dark);
         }
-        
-        .detail-delete-btn:hover {
-            background: rgba(255, 82, 82, 0.1);
+
+        tr:hover {
+            background-color: rgba(66,133,244,0.04);
         }
-        
-        .actions {
+
+        .action-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
-        
-        .action-btn {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .action-btn.delete {
-            background: #fff5f5;
-            color: #ff5252;
-            border: 1px solid #ffe2e2;
-        }
-        
-        .action-btn.delete:hover {
-            background: #ffebeb;
-        }
-        
-        /* 移动端底部导航栏 */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: var(--nav-height);
-            background: white;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
-            z-index: 100;
-            border-top-left-radius: 20px;
-            border-top-right-radius: 20px;
-        }
-        
-        .nav-item {
+
+        .header {
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--light-text);
-            text-decoration: none;
-            font-size: 0.75rem;
-            padding: 8px;
-            flex: 1;
-            transition: all 0.3s;
-            border-radius: 16px;
-            margin: 0 5px;
-        }
-        
-        .nav-item i {
-            font-size: 1.4rem;
-            margin-bottom: 5px;
-            transition: transform 0.3s;
-        }
-        
-        .nav-item.active {
-            color: var(--primary-color);
-            background: rgba(26, 42, 108, 0.1);
-            transform: translateY(-8px);
-        }
-        
-        .nav-item.active i {
-            transform: translateY(-5px);
-        }
-        
-        /* 页面切换动画 */
-        .page {
-            display: none;
-            animation: fadeIn 0.5s ease;
-        }
-        
-        .page.active {
-            display: block;
-        }
-        
-        /* 数据备份区域 */
-        .backup-section {
-            background: #f9fafb;
-            border-radius: 12px;
+            gap: 8px;
+            background: white;
+            border-radius: 8px;
             padding: 16px;
-            margin-top: 20px;
-            border: 1px dashed #e2e8f0;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 16px;
         }
-        
-        .backup-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 15px;
-            flex-wrap: wrap;
+
+        @media (min-width: 768px) {
+            .header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
         }
-        
-        /* 空状态 */
-        .empty-state {
-            text-align: center;
-            padding: 40px 0;
-            color: var(--light-text);
-        }
-        
-        .empty-state i {
-            font-size: 3rem;
-            color: #cbd5e0;
-            margin-bottom: 20px;
-            opacity: 0.6;
-        }
-        
-        .empty-state p {
-            font-size: 1.05rem;
-        }
-        
-        /* 首页时间显示样式 */
-        .current-time {
-            font-size: 1.1rem;
-            color: var(--light-text);
-            margin-left: 12px;
-            display: inline-block;
+
+        .header-title {
+            font-size: 20px;
             font-weight: 500;
-            background: rgba(26, 42, 108, 0.08);
-            padding: 6px 12px;
-            border-radius: 12px;
         }
-        
-        /* 动画 */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+
+        .current-time {
+            font-size: 14px;
+            color: var(--gray);
         }
-        
-        @keyframes cardAppear {
-            0% { opacity: 0; transform: scale(0.95) translateY(20px); }
-            100% { opacity: 1; transform: scale(1) translateY(0); }
+
+        .broken-section {
+            background-color: rgba(251,188,5,0.08);
+            border-left: 4px solid var(--warning);
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 8px;
         }
-        
-        @keyframes statCardAppear {
-            0% { opacity: 0; transform: translateY(30px); }
-            100% { opacity: 1; transform: translateY(0); }
+
+        .broken-title {
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--dark);
         }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.9; }
-            100% { transform: scale(1); opacity: 1; }
+
+        /* 弹窗样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
         }
-        
-        @keyframes ripple {
-            to {
-                transform: scale(4);
-                opacity: 0;
-            }
+
+        .modal-content {
+            background-color: white;
+            padding: 24px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
-        
-        /* PC端布局 */
-        @media (min-width: 992px) {
-            .side-nav {
-                display: flex;
-            }
-            
-            .app-content {
-                margin-left: var(--side-nav-width);
-                padding-bottom: 0;
-            }
-            
-            .bottom-nav {
-                display: none;
-            }
-            
-            .dashboard {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 30px;
-                margin-bottom: 30px;
-            }
-            
-            .stats-container {
-                grid-template-columns: repeat(4, 1fr);
-            }
-            
-            .work-history {
-                grid-column: span 2;
-            }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
         }
-        
-        /* 移动端布局 */
-        @media (max-width: 991px) {
-            .app-content {
-                padding-bottom: var(--nav-height);
-            }
-            
-            .app-header {
-                padding: 15px 0;
-            }
-            
-            .app-header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .card {
-                padding: 20px 18px;
-            }
-            
-            /* 优化移动端历史记录显示 */
-            .detail-table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-            
-            .detail-table th,
-            .detail-table td {
-                min-width: 100px;
-            }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: var(--gray);
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .daily-details {
+            display: none;
+            padding: 10px;
+            background-color: rgba(66,133,244,0.04);
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+
+        .daily-detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+
+        .detail-row {
+            background-color: rgba(66,133,244,0.04);
+        }
+
+        .detail-row td {
+            padding: 0;
+        }
+
+        .machine-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .record-info {
+            flex-grow: 1;
+        }
+
+        .record-note {
+            color: var(--gray);
+            font-size: 12px;
+            margin-top: 2px;
+            font-style: italic;
+        }
+
+        .record-customer {
+            color: var(--primary);
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
+        .record-reason {
+            color: var(--warning);
+            font-size: 12px;
+            margin-top: 2px;
         }
     </style>
 </head>
 <body>
-    <!-- 启动画面 -->
-    <div id="splash-screen">
-        <div class="splash-logo">
-            <i class="fas fa-industry"></i>
-        </div>
-        <h1>生产统计系统</h1>
-        <p id="splash-status">正在初始化系统...</p>
-        
-        <div class="splash-progress">
-            <div id="splash-progress-bar" class="splash-progress-bar"></div>
-        </div>
-        <div id="splash-message" class="splash-status">请稍候</div>
-        
-        <button id="force-continue-btn" class="btn btn-outline" style="margin-top: 20px; background: rgba(255,255,255,0.2); color: white; display: none;">
-            继续进入应用
-        </button>
-    </div>
+    <div class="container">
+        <header class="header">
+            <div class="header-title">水站水桶管理系统</div>
+            <div class="current-time" id="currentTime"></div>
+        </header>
 
-    <!-- 离线状态提示 -->
-    <div id="offline-status">
-        <i class="fas fa-wifi-slash"></i> 当前处于离线状态
-    </div>
-
-    <!-- 通知提示 -->
-    <div id="notification"></div>
-
-    <div class="main-container">
-        <!-- PC端侧边导航 -->
-        <div class="side-nav">
-            <a href="#" class="side-nav-item active" data-page="home-page">
-                <i class="fas fa-home"></i>
-                <span>首页</span>
-            </a>
-            <a href="#" class="side-nav-item" data-page="history-page">
-                <i class="fas fa-history"></i>
-                <span>记录</span>
-            </a>
-            <a href="#" class="side-nav-item" data-page="settings-page">
-                <i class="fas fa-cog"></i>
-                <span>设置</span>
-            </a>
-        </div>
-
-        <!-- 应用内容区域 -->
-        <div class="app-content">
-            <!-- 首页 -->
-            <div id="home-page" class="page active">
-                <div class="app-header">
-                    <h1><i class="fas fa-industry"></i> 生产统计 <span id="currentTime" class="current-time"></span></h1>
-                    <div class="header-actions">
-                        <button id="refreshBtn" class="btn btn-sm btn-outline"><i class="fas fa-sync-alt"></i> 刷新</button>
-                    </div>
+        <div class="card outgoing-card">
+            <div class="card-header">
+                <div class="card-title">水桶出库</div>
+            </div>
+            <div id="outForm">
+                <div class="form-group">
+                    <label for="outQuantity">出库数量</label>
+                    <input type="number" id="outQuantity" min="1" value="1">
                 </div>
-                
-                <div class="dashboard">
-                    <div class="card">
-                        <h2><i class="fas fa-plus-circle"></i> 新增记录</h2>
-                        <form id="workForm">
-                            <div class="form-group">
-                                <label for="workDate">生产日期</label>
-                                <input type="date" id="workDate" class="form-control" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="productName">产品名称</label>
-                                <div class="product-name-group">
-                                    <input type="text" id="productName" class="form-control" placeholder="请输入产品名称" required>
-                                    <button type="button" id="confirmProductBtn" class="btn btn-sm">确定</button>
-                                    <button type="button" id="modifyProductBtn" class="btn btn-sm btn-outline" style="display: none;">修改</button>
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="plannedQuantity">模切数量</label>
-                                <input type="number" id="plannedQuantity" class="form-control" placeholder="输入模切数量" min="0" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="adjustmentHours">机器调整时间（小时）</label>
-                                <input type="number" id="adjustmentHours" class="form-control" value="0.25" min="0" step="0.01" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="startTime">机器开机时间</label>
-                                <input type="time" id="startTime" class="form-control" value="" required readonly>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="endTime">完成时间</label>
-                                <input type="time" id="endTime" class="form-control" value="" required>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>当日累计完成数量</label>
-                                <input type="text" id="completed" class="form-control" readonly>
-                                <div class="progress-container">
-                                    <div id="progressBar" class="progress-bar" style="width: 0%">0%</div>
-                                </div>
-                                <small id="completionStatus" class="target-met">今日进度: 0/50,000 (0%)</small>
-                            </div>
-                            
-                            <button type="submit" class="btn"><i class="fas fa-save"></i> 保存记录</button>
-                        </form>
-                    </div>
-                    
-                    <div class="stats-container">
-                        <div class="stat-card">
-                            <i class="fas fa-bullseye"></i>
-                            <h3 id="dailyTargetDisplay">50,000</h3>
-                            <p>目标产量</p>
-                        </div>
-                        <div class="stat-card">
-                            <i class="fas fa-clock"></i>
-                            <h3 id="dailyHoursDisplay">8</h3>
-                            <p>工作时间</p>
-                        </div>
-                        <div class="stat-card">
-                            <i class="fas fa-boxes"></i>
-                            <h3 id="totalOutput">0</h3>
-                            <p>今日完成量</p>
-                        </div>
-                        <div class="stat-card">
-                            <i class="fas fa-balance-scale"></i>
-                            <h3 id="totalDifference">0</h3>
-                            <p>目标差异</p>
-                        </div>
-                    </div>
-                    
-                    <!-- 加班时间信息卡片 -->
-                    <div class="card">
-                        <h2><i class="fas fa-clock"></i> 加班时间</h2>
-                        <div class="overtime-info">
-                            <h3><i class="fas fa-business-time"></i> 今日工作时间详情</h3>
-                            <div class="overtime-details">
-                                <span>标准工作时间:</span>
-                                <span>8小时</span>
-                            </div>
-                            <div class="overtime-details">
-                                <span>实际工作时间:</span>
-                                <span id="actualHours">0小时</span>
-                            </div>
-                            <div class="overtime-details">
-                                <span>加班时间:</span>
-                                <span id="overtimeHours" class="overtime-value">0小时</span>
-                            </div>
-                        </div>
-                    </div>
+                <div class="form-group">
+                    <label for="outType">水桶类型</label>
+                    <select id="outType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="outDate">出库时间</label>
+                    <input type="datetime-local" id="outDate">
+                </div>
+                <div class="form-group">
+                    <label for="outCustomer">客户名称</label>
+                    <input type="text" id="outCustomer" placeholder="填写客户名称">
+                </div>
+                <div class="form-group">
+                    <label for="outNote">备注信息</label>
+                    <input type="text" id="outNote" placeholder="可填写用途或其他信息">
+                </div>
+                <button id="addOutBtn" class="btn btn-primary btn-block">添加出库记录</button>
+            </div>
+        </div>
+
+        <div class="card inventory-card">
+            <div class="card-header">
+                <div class="card-title">水桶入库</div>
+            </div>
+            <div id="inForm">
+                <div class="form-group">
+                    <label for="inQuantity">入库数量</label>
+                    <input type="number" id="inQuantity" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="inType">水桶类型</label>
+                    <select id="inType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="inDate">入库时间</label>
+                    <input type="datetime-local" id="inDate">
+                </div>
+                <div class="form-group">
+                    <label for="inNote">备注信息</label>
+                    <input type="text" id="inNote" placeholder="可填写供应商或其他信息">
+                </div>
+                <button id="addInBtn" class="btn btn-primary btn-block">添加入库记录</button>
+            </div>
+        </div>
+
+        <div class="card stats-card">
+            <div class="card-header">
+                <div class="card-title">库存统计</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">总入库量</div>
+                    <div class="stat-value" id="totalIn">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">总出库量</div>
+                    <div class="stat-value" id="totalOut">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">当前库存</div>
+                    <div class="stat-value" id="currentStock">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">破损桶数量</div>
+                    <div class="stat-value" id="brokenStock">0</div>
                 </div>
             </div>
             
-            <!-- 历史记录页 -->
-            <div id="history-page" class="page">
-                <div class="app-header">
-                    <h1><i class="fas fa-history"></i> 生产记录</h1>
-                    <div class="header-actions">
-                        <button id="exportHistoryBtn" class="btn btn-sm btn-outline"><i class="fas fa-file-excel"></i> 导出</button>
-                    </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-title">标准桶库存</div>
+                    <div class="stat-value" id="standardStock">0</div>
                 </div>
-                
-                <div class="work-history">
-                    <table id="historyTable">
+                <div class="stat-card">
+                    <div class="stat-title">550ml库存</div>
+                    <div class="stat-value" id="largeStock">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">330ml库存</div>
+                    <div class="stat-value" id="smallStock">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">水机库存</div>
+                    <div class="stat-value" id="customStock">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card broken-card">
+            <div class="card-header">
+                <div class="card-title">破损桶管理</div>
+            </div>
+            <div id="brokenForm">
+                <div class="form-group">
+                    <label for="brokenType">破损桶类型</label>
+                    <select id="brokenType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="brokenQuantity">破损数量</label>
+                    <input type="number" id="brokenQuantity" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="brokenDate">破损时间</label>
+                    <input type="datetime-local" id="brokenDate">
+                </div>
+                <div class="form-group">
+                    <label for="brokenReason">破损原因</label>
+                    <input type="text" id="brokenReason" placeholder="填写破损原因">
+                </div>
+                <button id="addBrokenBtn" class="btn btn-warning btn-block">记录破损桶</button>
+            </div>
+        </div>
+
+        <div class="card machine-card">
+            <div class="card-header">
+                <div class="card-title">水机统计</div>
+            </div>
+            <div class="machine-stats">
+                <div class="stat-card">
+                    <div class="stat-title">水机总数</div>
+                    <div class="stat-value" id="totalMachines">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">已分配水机</div>
+                    <div class="stat-value" id="assignedMachines">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">可用水机</div>
+                    <div class="stat-value" id="availableMachines">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-title">维修中水机</div>
+                    <div class="stat-value" id="maintenanceMachines">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="records-section">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">入库记录</div>
+                </div>
+                <div class="table-container">
+                    <table id="inRecords">
                         <thead>
                             <tr>
                                 <th>日期</th>
-                                <th>完成数量</th>
-                                <th>差异</th>
-                                <th>操作</th>
+                                <th>入库总量</th>
+                                <th>详细记录</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- 动态内容将通过JavaScript填充 -->
+                            <!-- 入库记录将在这里动态添加 -->
                         </tbody>
                     </table>
                 </div>
             </div>
-            
-            <!-- 设置页 -->
-            <div id="settings-page" class="page">
-                <div class="app-header">
-                    <h1><i class="fas fa-cog"></i> 系统设置</h1>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <div class="card-title">出库记录</div>
                 </div>
-                
-                <div class="card">
-                    <h2><i class="fas fa-database"></i> 数据管理</h2>
-                    <div class="backup-section">
-                        <div class="backup-actions">
-                            <button id="exportBtn" class="btn btn-sm"><i class="fas fa-file-excel"></i> 导出数据</button>
-                            <button id="clearBtn" class="btn btn-sm" style="background: #fff5f5; color: #ff5252; border: 1px solid #ffe2e2;">
-                                <i class="fas fa-trash-alt"></i> 清空数据
-                            </button>
-                            <button id="backupBtn" class="btn btn-sm btn-outline"><i class="fas fa-copy"></i> 创建备份</button>
-                            <button id="restoreBtn" class="btn btn-sm btn-outline"><i class="fas fa-undo"></i> 恢复备份</button>
-                        </div>
-                    </div>
+                <div class="table-container">
+                    <table id="outRecords">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>出库总量</th>
+                                <th>详细记录</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 出库记录将在这里动态添加 -->
+                        </tbody>
+                    </table>
                 </div>
-                
-                <div class="card">
-                    <h2><i class="fas fa-bullseye"></i> 生产目标</h2>
-                    <div class="form-group">
-                        <label for="dailyTarget">每日目标产量</label>
-                        <input type="number" id="dailyTarget" class="form-control" value="50000" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="dailyHours">每日工作时间(小时)</label>
-                        <input type="number" id="dailyHours" class="form-control" value="8" min="1" max="24">
-                    </div>
-                    <button id="saveSettingsBtn" class="btn"><i class="fas fa-save"></i> 保存设置</button>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <div class="card-title">破损记录</div>
+                </div>
+                <div class="table-container">
+                    <table id="brokenRecords">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>破损总量</th>
+                                <th>详细记录</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 破损记录将在这里动态添加 -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- 移动端底部导航栏 -->
-    <div class="bottom-nav">
-        <a href="#" class="nav-item active" data-page="home-page">
-            <i class="fas fa-home"></i>
-            <span>首页</span>
-        </a>
-        <a href="#" class="nav-item" data-page="history-page">
-            <i class="fas fa-history"></i>
-            <span>记录</span>
-        </a>
-        <a href="#" class="nav-item" data-page="settings-page">
-            <i class="fas fa-cog"></i>
-            <span>设置</span>
-        </a>
+
+    <!-- 编辑入库记录弹窗 -->
+    <div id="editInModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">编辑入库记录</div>
+                <button class="modal-close" id="closeEditInModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modalInQuantity">入库数量</label>
+                    <input type="number" id="modalInQuantity" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="modalInType">水桶类型</label>
+                    <select id="modalInType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modalInDate">入库时间</label>
+                    <input type="datetime-local" id="modalInDate">
+                </div>
+                <div class="form-group">
+                    <label for="modalInNote">备注信息</label>
+                    <input type="text" id="modalInNote" placeholder="可填写供应商或其他信息">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelEditInBtn" class="btn btn-danger">取消</button>
+                <button id="saveEditInBtn" class="btn btn-success">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑出库记录弹窗 -->
+    <div id="editOutModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">编辑出库记录</div>
+                <button class="modal-close" id="closeEditOutModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modalOutQuantity">出库数量</label>
+                    <input type="number" id="modalOutQuantity" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="modalOutType">水桶类型</label>
+                    <select id="modalOutType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modalOutDate">出库时间</label>
+                    <input type="datetime-local" id="modalOutDate">
+                </div>
+                <div class="form-group">
+                    <label for="modalOutCustomer">客户名称</label>
+                    <input type="text" id="modalOutCustomer" placeholder="填写客户名称">
+                </div>
+                <div class="form-group">
+                    <label for="modalOutNote">备注信息</label>
+                    <input type="text" id="modalOutNote" placeholder="可填写用途或其他信息">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelEditOutBtn" class="btn btn-danger">取消</button>
+                <button id="saveEditOutBtn" class="btn btn-success">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑破损记录弹窗 -->
+    <div id="editBrokenModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">编辑破损记录</div>
+                <button class="modal-close" id="closeEditBrokenModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modalBrokenQuantity">破损数量</label>
+                    <input type="number" id="modalBrokenQuantity" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="modalBrokenType">水桶类型</label>
+                    <select id="modalBrokenType">
+                        <option value="标准桶">标准桶</option>
+                        <option value="550ml">550ml</option>
+                        <option value="330ml">330ml</option>
+                        <option value="水机">水机</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modalBrokenDate">破损时间</label>
+                    <input type="datetime-local" id="modalBrokenDate">
+                </div>
+                <div class="form-group">
+                    <label for="modalBrokenReason">破损原因</label>
+                    <input type="text" id="modalBrokenReason" placeholder="填写破损原因">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelEditBrokenBtn" class="btn btn-danger">取消</button>
+                <button id="saveEditBrokenBtn" class="btn btn-success">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认删除弹窗 -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="confirmModalTitle">确认操作</div>
+                <button class="modal-close" id="closeConfirmModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage">您确定要执行此操作吗？</p>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelConfirmBtn" class="btn btn-danger">取消</button>
+                <button id="confirmActionBtn" class="btn btn-success">确认</button>
+            </div>
+        </div>
     </div>
 
     <script>
-        // 全局变量
-        let currentTimeInterval = null;
-        const DATA_VERSION = 3; // 更新数据版本
-        let startupTimeout = null;
-        let forceContinue = false;
-        const STORAGE_LIMIT = 100 * 1024 * 1024; // 100MB存储限制
-        let productLocked = false;
-        
-        // 初始化应用
-        document.addEventListener('DOMContentLoaded', function() {
-            // 更新启动状态
-            updateSplashStatus('正在初始化系统', 10);
+        // 水桶管理系统核心功能
+        class WaterBucketManager {
+            constructor() {
+                this.records = {
+                    in: [],
+                    out: [],
+                    broken: []
+                };
+                
+                this.machines = {
+                    total: 0,
+                    assigned: 0,
+                    available: 0,
+                    maintenance: 0
+                };
+                
+                this.currentEditIndex = null;
+                this.currentEditType = null;
+                this.expandedDays = new Set();
+                
+                this.init();
+            }
             
-            // 添加强制继续按钮
-            document.getElementById('force-continue-btn').addEventListener('click', function() {
-                forceContinue = true;
-                hideSplashScreen();
-                initApp();
-            });
+            init() {
+                this.loadData();
+                this.initDateTimeInputs();
+                this.updateCurrentTime();
+                setInterval(() => this.updateCurrentTime(), 1000);
+                
+                // 绑定事件
+                document.getElementById('addInBtn').addEventListener('click', () => this.addInRecord());
+                document.getElementById('addOutBtn').addEventListener('click', () => this.addOutRecord());
+                document.getElementById('addBrokenBtn').addEventListener('click', () => this.addBrokenRecord());
+                
+                // 编辑表单事件
+                document.getElementById('saveEditInBtn').addEventListener('click', () => this.saveInEdit());
+                document.getElementById('cancelEditInBtn').addEventListener('click', () => this.closeModal('editInModal'));
+                document.getElementById('closeEditInModal').addEventListener('click', () => this.closeModal('editInModal'));
+                
+                document.getElementById('saveEditOutBtn').addEventListener('click', () => this.saveOutEdit());
+                document.getElementById('cancelEditOutBtn').addEventListener('click', () => this.closeModal('editOutModal'));
+                document.getElementById('closeEditOutModal').addEventListener('click', () => this.closeModal('editOutModal'));
+                
+                document.getElementById('saveEditBrokenBtn').addEventListener('click', () => this.saveBrokenEdit());
+                document.getElementById('cancelEditBrokenBtn').addEventListener('click', () => this.closeModal('editBrokenModal'));
+                document.getElementById('closeEditBrokenModal').addEventListener('click', () => this.closeModal('editBrokenModal'));
+                
+                // 确认对话框事件
+                document.getElementById('cancelConfirmBtn').addEventListener('click', () => this.closeModal('confirmModal'));
+                document.getElementById('closeConfirmModal').addEventListener('click', () => this.closeModal('confirmModal'));
+            }
             
-            // 设置超时机制 - 确保启动画面不会永久显示
-            startupTimeout = setTimeout(() => {
-                document.getElementById('force-continue-btn').style.display = 'block';
-                showNotification('启动时间较长，您可以强制进入应用', 'warning');
-                updateSplashStatus('启动时间较长，请稍候或点击"继续进入应用"', 90);
-            }, 5000); // 5秒后显示强制继续按钮
-            
-            // 执行数据迁移和应用初始化
-            setTimeout(() => {
-                try {
-                    // 确保数据初始化
-                    initData();
+            // 从本地存储加载数据
+            loadData() {
+                const savedData = localStorage.getItem('waterBucketRecords');
+                if (savedData) {
+                    const data = JSON.parse(savedData);
+                    this.records = {
+                        in: data.in || [],
+                        out: data.out || [],
+                        broken: data.broken || []
+                    };
                     
-                    // 执行数据迁移
-                    migrateData()
-                        .then(() => {
-                            if (forceContinue) return;
-                            
-                            // 初始化应用
-                            initApp();
-                            
-                            // 隐藏启动画面
-                            hideSplashScreen();
-                            
-                            // 清除超时定时器
-                            clearTimeout(startupTimeout);
-                        })
-                        .catch(e => {
-                            console.error('数据迁移失败:', e);
-                            updateSplashStatus('数据迁移失败: ' + e.message, 100);
-                            
-                            // 5秒后强制进入应用
-                            setTimeout(() => {
-                                hideSplashScreen();
-                                initApp();
-                            }, 3000);
+                    if (data.machines) {
+                        this.machines = data.machines;
+                    }
+                    
+                    this.updateAll();
+                }
+            }
+            
+            // 保存数据到本地存储
+            saveData() {
+                const data = {
+                    in: this.records.in,
+                    out: this.records.out,
+                    broken: this.records.broken,
+                    machines: this.machines
+                };
+                localStorage.setItem('waterBucketRecords', JSON.stringify(data));
+                this.updateAll();
+            }
+            
+            // 更新当前时间显示
+            updateCurrentTime() {
+                const now = new Date();
+                document.getElementById('currentTime').textContent = this.formatDateTime(now, true);
+            }
+            
+            // 初始化日期时间输入为当前时间
+            initDateTimeInputs() {
+                const now = new Date();
+                const formattedNow = now.toISOString().slice(0, 16);
+                document.getElementById('inDate').value = formattedNow;
+                document.getElementById('outDate').value = formattedNow;
+                document.getElementById('brokenDate').value = formattedNow;
+            }
+            
+            // 添加入库记录
+            addInRecord() {
+                const quantity = parseInt(document.getElementById('inQuantity').value);
+                const type = document.getElementById('inType').value;
+                let date = document.getElementById('inDate').value;
+                const note = document.getElementById('inNote').value;
+                
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                if (quantity > 0) {
+                    this.records.in.unshift({
+                        date: this.formatDateTime(date),
+                        type,
+                        quantity,
+                        note
+                    });
+
+                    // 如果是水机，更新水机统计
+                    if (type === '水机') {
+                        this.machines.total += quantity;
+                        this.machines.available += quantity;
+                    }
+                    
+                    this.saveData();
+                    
+                    // 清空表单
+                    document.getElementById('inQuantity').value = '1';
+                    document.getElementById('inNote').value = '';
+                    document.getElementById('inDate').value = '';
+                } else {
+                    this.showAlert('请输入有效的数量');
+                }
+            }
+            
+            // 添加出库记录
+            addOutRecord() {
+                const quantity = parseInt(document.getElementById('outQuantity').value);
+                const type = document.getElementById('outType').value;
+                let date = document.getElementById('outDate').value;
+                const customer = document.getElementById('outCustomer').value;
+                const note = document.getElementById('outNote').value;
+                
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                // 检查库存是否足够（不包括破损桶）
+                const available = this.getAvailableStock(type);
+                
+                if (quantity > 0) {
+                    if (quantity <= available) {
+                        this.records.out.unshift({
+                            date: this.formatDateTime(date),
+                            type,
+                            quantity,
+                            customer,
+                            note
                         });
-                } catch (e) {
-                    console.error('启动过程中出错:', e);
-                    updateSplashStatus('启动失败: ' + e.message, 100);
-                    
-                    // 5秒后强制进入应用
-                    setTimeout(() => {
-                        hideSplashScreen();
-                        initApp();
-                    }, 3000);
-                }
-            }, 300);
-        });
-        
-        // 更新启动画面状态
-        function updateSplashStatus(message, progress) {
-            document.getElementById('splash-status').textContent = message;
-            document.getElementById('splash-message').textContent = message;
-            if (progress !== undefined) {
-                document.getElementById('splash-progress-bar').style.width = progress + '%';
-            }
-        }
-        
-        // 隐藏启动画面
-        function hideSplashScreen() {
-            document.getElementById('splash-screen').style.opacity = '0';
-            setTimeout(() => {
-                document.getElementById('splash-screen').style.display = 'none';
-            }, 500);
-        }
-        
-        // 初始化本地存储数据
-        function initData() {
-            if (!localStorage.getItem('productionData')) {
-                localStorage.setItem('productionData', JSON.stringify({
-                    _version: DATA_VERSION,
-                    settings: {
-                        dailyTarget: 50000,
-                        dailyHours: 8
-                    },
-                    records: []
-                }));
-            }
-        }
-        
-        // 数据迁移函数 - 确保旧数据兼容新版本
-        function migrateData() {
-            return new Promise((resolve, reject) => {
-                updateSplashStatus('检查数据兼容性', 20);
-                
-                // 检查是否存在旧版本数据
-                const oldData = localStorage.getItem('productionData');
-                
-                if (!oldData) {
-                    updateSplashStatus('未发现旧数据', 40);
-                    resolve();
-                    return;
-                }
-                
-                try {
-                    updateSplashStatus('解析旧数据', 30);
-                    const parsedData = JSON.parse(oldData);
-                    
-                    // 检查是否需要迁移
-                    if (!parsedData._version || parsedData._version < DATA_VERSION) {
-                        updateSplashStatus('迁移旧数据到新格式', 50);
+
+                        // 如果是水机，更新水机统计
+                        if (type === '水机') {
+                            this.machines.assigned += quantity;
+                            this.machines.available -= quantity;
+                        }
                         
-                        // 执行迁移逻辑
-                        const migratedData = migrateToV3(parsedData);
+                        this.saveData();
                         
-                        // 保存迁移后的数据
-                        localStorage.setItem('productionData', JSON.stringify(migratedData));
-                        
-                        updateSplashStatus('数据迁移成功', 80);
-                        resolve();
+                        // 清空表单
+                        document.getElementById('outQuantity').value = '1';
+                        document.getElementById('outCustomer').value = '';
+                        document.getElementById('outNote').value = '';
+                        document.getElementById('outDate').value = '';
                     } else {
-                        updateSplashStatus('数据已是最新版本', 60);
-                        resolve();
+                        this.showAlert(`库存不足！当前${type}可用数量为：${available}`);
                     }
-                } catch (e) {
-                    console.error('数据迁移失败:', e);
-                    reject(new Error('数据迁移失败: ' + e.message));
+                } else {
+                    this.showAlert('请输入有效的数量');
                 }
-            });
-        }
-        
-        // 迁移到版本3的数据格式 - 支持新字段
-        function migrateToV3(oldData) {
-            const newData = {
-                _version: DATA_VERSION,
-                settings: oldData.settings || { dailyTarget: 50000, dailyHours: 8 },
-                records: []
-            };
+            }
             
-            // 迁移记录数据
-            if (oldData.records && Array.isArray(oldData.records)) {
-                // 仅迁移前1000条记录，避免性能问题
-                const recordsToMigrate = oldData.records.slice(0, 1000);
+            // 添加破损桶记录
+            addBrokenRecord() {
+                const type = document.getElementById('brokenType').value;
+                const quantity = parseInt(document.getElementById('brokenQuantity').value);
+                let date = document.getElementById('brokenDate').value;
+                const reason = document.getElementById('brokenReason').value;
                 
-                recordsToMigrate.forEach(record => {
-                    // 确保每个记录都有唯一ID
-                    if (!record.id) {
-                        record.id = Date.now() + Math.floor(Math.random() * 1000);
-                    }
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                if (quantity > 0) {
+                    // 检查库存是否足够（包括破损桶）
+                    const totalAvailable = this.getTotalStock(type);
+                    const brokenOfType = this.records.broken.reduce((sum, record) => 
+                        record.type === type ? sum + record.quantity : sum, 0);
+                    const available = totalAvailable - brokenOfType;
                     
-                    // 确保每个记录都有时间戳
-                    if (!record.timestamp && record.date && record.time) {
-                        try {
-                            const [year, month, day] = record.date.split('-');
-                            const [hours, minutes] = record.time.split(':');
-                            const dateObj = new Date(year, month-1, day, hours, minutes);
-                            record.timestamp = dateObj.getTime();
-                        } catch (e) {
-                            // 使用当前时间作为回退
-                            record.timestamp = Date.now();
+                    if (quantity <= available) {
+                        this.records.broken.unshift({
+                            date: this.formatDateTime(date),
+                            type,
+                            quantity,
+                            reason
+                        });
+
+                        // 如果是水机，更新水机统计
+                        if (type === '水机') {
+                            this.machines.maintenance += quantity;
+                            this.machines.available -= quantity;
                         }
-                    } else if (!record.timestamp) {
-                        // 如果无法获取时间，使用当前时间
-                        record.timestamp = Date.now();
+                        
+                        this.saveData();
+                        
+                        // 清空表单
+                        document.getElementById('brokenQuantity').value = '1';
+                        document.getElementById('brokenReason').value = '';
+                        document.getElementById('brokenDate').value = '';
+                    } else {
+                        this.showAlert(`库存不足！当前${type}总数量为：${totalAvailable}，已破损：${brokenOfType}，可用：${available}`);
                     }
-                    
-                    // 迁移到新字段结构
-                    const migratedRecord = {
-                        id: record.id,
-                        timestamp: record.timestamp,
-                        date: record.date || new Date(record.timestamp).toISOString().split('T')[0],
-                        startTime: record.startTime || record.time || formatTime(new Date(record.timestamp)),
-                        endTime: record.endTime || formatTime(new Date(record.timestamp + 3600000)), // 默认1小时后
-                        productName: record.productName || record.content || "未命名产品",
-                        plannedQuantity: record.plannedQuantity || record.output || 0,
-                        finishedQuantity: record.finishedQuantity || record.output || 0,
-                        adjustmentHours: record.adjustmentHours || 0.25
+                } else {
+                    this.showAlert('请输入有效的数量');
+                }
+            }
+            
+            // 获取指定类型的可用库存（不包括破损桶）
+            getAvailableStock(type) {
+                const typeIn = this.records.in.reduce((sum, record) => 
+                    record.type === type ? sum + record.quantity : sum, 0);
+                const typeOut = this.records.out.reduce((sum, record) => 
+                    record.type === type ? sum + record.quantity : sum, 0);
+                const typeBroken = this.records.broken.reduce((sum, record) => 
+                    record.type === type ? sum + record.quantity : sum, 0);
+                return typeIn - typeOut - typeBroken;
+            }
+            
+            // 获取指定类型的总库存（不包括出库和破损）
+            getTotalStock(type) {
+                const typeIn = this.records.in.reduce((sum, record) => 
+                    record.type === type ? sum + record.quantity : sum, 0);
+                const typeOut = this.records.out.reduce((sum, record) => 
+                    record.type === type ? sum + record.quantity : sum, 0);
+                return typeIn - typeOut;
+            }
+            
+            // 编辑入库记录
+            editInRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'in';
+                
+                const record = this.records.in[index];
+                
+                document.getElementById('modalInQuantity').value = record.quantity;
+                document.getElementById('modalInType').value = record.type;
+                document.getElementById('modalInNote').value = record.note || '';
+                
+                // 设置日期时间
+                const dateInput = document.getElementById('modalInDate');
+                const dateObj = new Date(record.date);
+                const formattedDate = dateObj.toISOString().slice(0, 16);
+                dateInput.value = formattedDate;
+                
+                this.showModal('editInModal');
+            }
+            
+            // 保存入库编辑
+            saveInEdit() {
+                const quantity = parseInt(document.getElementById('modalInQuantity').value);
+                const type = document.getElementById('modalInType').value;
+                let date = document.getElementById('modalInDate').value;
+                const note = document.getElementById('modalInNote').value;
+                
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                if (quantity > 0) {
+                    this.records.in[this.currentEditIndex] = {
+                        date: this.formatDateTime(date),
+                        type,
+                        quantity,
+                        note
                     };
                     
-                    newData.records.push(migratedRecord);
-                });
-            } else if (Array.isArray(oldData)) {
-                // 处理旧版本数据格式（直接是记录数组）
-                updateSplashStatus('迁移旧版本数据格式', 60);
+                    this.saveData();
+                    this.closeModal('editInModal');
+                } else {
+                    this.showAlert('请输入有效的数量');
+                }
+            }
+            
+            // 编辑出库记录
+            editOutRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'out';
                 
-                // 仅迁移前1000条记录
-                const recordsToMigrate = oldData.slice(0, 1000);
+                const record = this.records.out[index];
                 
-                recordsToMigrate.forEach(record => {
-                    // 确保每个记录都有唯一ID
-                    if (!record.id) {
-                        record.id = Date.now() + Math.floor(Math.random() * 1000);
-                    }
-                    
-                    // 确保每个记录都有时间戳
-                    if (!record.timestamp && record.date && record.time) {
-                        try {
-                            const [year, month, day] = record.date.split('-');
-                            const [hours, minutes] = record.time.split(':');
-                            const dateObj = new Date(year, month-1, day, hours, minutes);
-                            record.timestamp = dateObj.getTime();
-                        } catch (e) {
-                            // 使用当前时间作为回退
-                            record.timestamp = Date.now();
-                        }
-                    } else if (!record.timestamp) {
-                        // 如果无法获取时间，使用当前时间
-                        record.timestamp = Date.now();
-                    }
-                    
-                    // 迁移到新字段结构
-                    const migratedRecord = {
-                        id: record.id,
-                        timestamp: record.timestamp,
-                        date: record.date || new Date(record.timestamp).toISOString().split('T')[0],
-                        startTime: record.startTime || record.time || formatTime(new Date(record.timestamp)),
-                        endTime: record.endTime || formatTime(new Date(record.timestamp + 3600000)), // 默认1小时后
-                        productName: record.productName || record.content || "未命名产品",
-                        plannedQuantity: record.plannedQuantity || record.output || 0,
-                        finishedQuantity: record.finishedQuantity || record.output || 0,
-                        adjustmentHours: record.adjustmentHours || 0.25
+                document.getElementById('modalOutQuantity').value = record.quantity;
+                document.getElementById('modalOutType').value = record.type;
+                document.getElementById('modalOutCustomer').value = record.customer || '';
+                document.getElementById('modalOutNote').value = record.note || '';
+                
+                // 设置日期时间
+                const dateInput = document.getElementById('modalOutDate');
+                const dateObj = new Date(record.date);
+                const formattedDate = dateObj.toISOString().slice(0, 16);
+                dateInput.value = formattedDate;
+                
+                this.showModal('editOutModal');
+            }
+            
+            // 保存出库编辑
+            saveOutEdit() {
+                const quantity = parseInt(document.getElementById('modalOutQuantity').value);
+                const type = document.getElementById('modalOutType').value;
+                let date = document.getElementById('modalOutDate').value;
+                const customer = document.getElementById('modalOutCustomer').value;
+                const note = document.getElementById('modalOutNote').value;
+                
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                if (quantity > 0) {
+                    this.records.out[this.currentEditIndex] = {
+                        date: this.formatDateTime(date),
+                        type,
+                        quantity,
+                        customer,
+                        note
                     };
                     
-                    newData.records.push(migratedRecord);
-                });
-            }
-            
-            return newData;
-        }
-        
-        // 初始化应用功能
-        function initApp() {
-            console.log('初始化应用');
-            updateSplashStatus('初始化应用界面', 90);
-            
-            // 设置当前日期和时间
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('workDate').value = today;
-            
-            // 设置默认时间
-            updateCurrentTimeInputs();
-            
-            // 启动实时时钟
-            updateCurrentTime();
-            currentTimeInterval = setInterval(updateCurrentTime, 1000);
-            
-            // 事件监听
-            setupEventListeners();
-            
-            // 初始加载数据
-            updateDailyStats();
-            loadHistory();
-            
-            // 更新网络状态
-            updateOnlineStatus();
-            
-            updateSplashStatus('启动完成', 100);
-        }
-        
-        // 更新当前时间输入框
-        function updateCurrentTimeInputs() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            
-            // 结束时间默认为当前时间+1小时
-            const endTime = new Date(now.getTime() + 3600000);
-            const endHours = String(endTime.getHours()).padStart(2, '0');
-            const endMinutes = String(endTime.getMinutes()).padStart(2, '0');
-            
-            document.getElementById('startTime').value = `${hours}:${minutes}`;
-            document.getElementById('endTime').value = `${endHours}:${endMinutes}`;
-        }
-        
-        // 更新当前时间显示
-        function updateCurrentTime() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            document.getElementById('currentTime').textContent = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()} ${hours}:${minutes}:${seconds}`;
-        }
-        
-        // 设置事件监听
-        function setupEventListeners() {
-            document.getElementById('workForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                saveWorkRecord();
-            });
-            
-            document.getElementById('refreshBtn').addEventListener('click', function() {
-                updateDailyStats();
-                showNotification('数据已刷新', 'info');
-            });
-            
-            document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
-            document.getElementById('exportBtn').addEventListener('click', exportData);
-            document.getElementById('clearBtn').addEventListener('click', clearData);
-            document.getElementById('exportHistoryBtn').addEventListener('click', exportHistoryToExcel);
-            document.getElementById('backupBtn').addEventListener('click', createBackup);
-            document.getElementById('restoreBtn').addEventListener('click', restoreBackup);
-            
-            // 产品名称确认按钮
-            document.getElementById('confirmProductBtn').addEventListener('click', function() {
-                const productName = document.getElementById('productName').value;
-                if (!productName) {
-                    showNotification('请输入产品名称', 'error');
-                    return;
-                }
-                
-                productLocked = true;
-                document.getElementById('productName').readOnly = true;
-                document.getElementById('confirmProductBtn').style.display = 'none';
-                document.getElementById('modifyProductBtn').style.display = 'block';
-                document.getElementById('startTime').readOnly = true;
-                
-                // 更新开机时间为当前时间
-                updateCurrentTimeInputs();
-                
-                showNotification('产品名称已确认');
-            });
-            
-            // 产品名称修改按钮
-            document.getElementById('modifyProductBtn').addEventListener('click', function() {
-                productLocked = false;
-                document.getElementById('productName').readOnly = false;
-                document.getElementById('confirmProductBtn').style.display = 'block';
-                document.getElementById('modifyProductBtn').style.display = 'none';
-                document.getElementById('startTime').readOnly = false;
-                
-                showNotification('可以修改产品名称', 'info');
-            });
-            
-            // 添加日期变更事件监听
-            document.getElementById('workDate').addEventListener('change', function() {
-                updateDailyStats();
-            });
-            
-            // 页面导航
-            setupNavigation();
-            
-            // 网络状态监听
-            window.addEventListener('online', updateOnlineStatus);
-            window.addEventListener('offline', updateOnlineStatus);
-        }
-        
-        // 显示通知
-        function showNotification(message, type = 'success') {
-            const notification = document.getElementById('notification');
-            notification.textContent = message;
-            
-            // 设置通知类型
-            notification.className = '';
-            notification.classList.add(type);
-            notification.classList.add('show');
-            
-            // 自动隐藏
-            setTimeout(() => {
-                notification.classList.remove('show');
-            }, 3000);
-        }
-        
-        // 更新网络状态显示
-        function updateOnlineStatus() {
-            const offlineStatus = document.getElementById('offline-status');
-            if (navigator.onLine) {
-                offlineStatus.classList.remove('show');
-            } else {
-                offlineStatus.classList.add('show');
-            }
-        }
-        
-        // 获取存储的数据
-        function getData() {
-            const dataStr = localStorage.getItem('productionData');
-            if (!dataStr) {
-                initData();
-                return JSON.parse(localStorage.getItem('productionData'));
-            }
-            
-            try {
-                return JSON.parse(dataStr);
-            } catch (e) {
-                console.error('解析数据失败，重置数据', e);
-                initData();
-                return JSON.parse(localStorage.getItem('productionData'));
-            }
-        }
-        
-        // 保存数据到本地存储
-        function saveData(data) {
-            try {
-                localStorage.setItem('productionData', JSON.stringify(data));
-            } catch (e) {
-                console.error('保存数据失败:', e);
-                showNotification('保存数据失败，请检查存储空间', 'error');
-            }
-        }
-        
-        // 格式化字节为最佳单位
-        function formatBytes(bytes, decimals = 2) {
-            if (bytes === 0) return '0 Bytes';
-            
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-        }
-        
-        // 设置页面导航
-        function setupNavigation() {
-            // PC端侧边导航
-            const sideNavItems = document.querySelectorAll('.side-nav-item');
-            sideNavItems.forEach(item => {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const pageId = this.getAttribute('data-page');
-                    switchPage(pageId);
-                    
-                    // 更新活动状态
-                    sideNavItems.forEach(navItem => navItem.classList.remove('active'));
-                    this.classList.add('active');
-                });
-            });
-            
-            // 移动端底部导航
-            const navItems = document.querySelectorAll('.nav-item');
-            navItems.forEach(item => {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const pageId = this.getAttribute('data-page');
-                    switchPage(pageId);
-                    
-                    // 更新活动状态
-                    navItems.forEach(navItem => navItem.classList.remove('active'));
-                    this.classList.add('active');
-                });
-            });
-        }
-        
-        // 切换页面
-        function switchPage(pageId) {
-            const pages = document.querySelectorAll('.page');
-            pages.forEach(page => {
-                page.classList.remove('active');
-                page.style.opacity = 0;
-            });
-            
-            const activePage = document.getElementById(pageId);
-            if (activePage) {
-                activePage.classList.add('active');
-                setTimeout(() => {
-                    activePage.style.opacity = 1;
-                }, 10);
-                
-                // 如果是历史页面，刷新数据
-                if (pageId === 'history-page') {
-                    loadHistory();
+                    this.saveData();
+                    this.closeModal('editOutModal');
+                } else {
+                    this.showAlert('请输入有效的数量');
                 }
             }
-        }
-        
-        // 保存生产记录
-        function saveWorkRecord() {
-            const date = document.getElementById('workDate').value;
-            const productName = document.getElementById('productName').value;
-            const plannedQuantity = parseInt(document.getElementById('plannedQuantity').value);
-            const adjustmentHours = parseFloat(document.getElementById('adjustmentHours').value);
-            const startTime = document.getElementById('startTime').value;
-            const endTime = document.getElementById('endTime').value;
             
-            // 验证必填字段
-            if (!date || !productName || isNaN(plannedQuantity) || 
-                isNaN(adjustmentHours) || !startTime || !endTime) {
-                showNotification('请填写完整的生产信息', 'error');
-                return;
-            }
-            
-            // 验证产品名称是否已确认
-            if (!productLocked) {
-                showNotification('请先确认产品名称', 'error');
-                return;
-            }
-            
-            // 验证调整时间
-            if (adjustmentHours < 0) {
-                showNotification('调整时间不能为负数', 'error');
-                return;
-            }
-            
-            // 验证时间顺序
-            const startParts = startTime.split(':');
-            const endParts = endTime.split(':');
-            const startDate = new Date(0, 0, 0, parseInt(startParts[0]), parseInt(startParts[1]));
-            const endDate = new Date(0, 0, 0, parseInt(endParts[0]), parseInt(endParts[1]));
-            
-            if (startDate >= endDate) {
-                showNotification('完成时间必须在开机时间之后', 'error');
-                return;
-            }
-            
-            const data = getData();
-            
-            // 创建时间戳（使用开机时间）
-            const [hours, minutes] = startTime.split(':');
-            const recordDate = new Date(date);
-            recordDate.setHours(parseInt(hours));
-            recordDate.setMinutes(parseInt(minutes));
-            
-            // 创建新记录
-            const newRecord = {
-                date,
-                startTime,
-                endTime,
-                productName,
-                plannedQuantity,
-                finishedQuantity: plannedQuantity, // 完成数量等于模切数量
-                adjustmentHours,
-                timestamp: recordDate.getTime(),
-                id: Date.now() + Math.floor(Math.random() * 1000) // 更安全的ID生成
-            };
-            
-            // 添加新记录
-            data.records.push(newRecord);
-            saveData(data);
-            
-            // 重置表单
-            document.getElementById('productName').value = '';
-            document.getElementById('productName').readOnly = false;
-            document.getElementById('confirmProductBtn').style.display = 'block';
-            document.getElementById('modifyProductBtn').style.display = 'none';
-            document.getElementById('startTime').readOnly = false;
-            document.getElementById('plannedQuantity').value = '';
-            document.getElementById('adjustmentHours').value = '0.25';
-            productLocked = false;
-            
-            // 设置默认时间
-            updateCurrentTimeInputs();
-            
-            // 更新统计
-            updateDailyStats();
-            
-            showNotification('生产记录已保存');
-        }
-        
-        // 更新当日统计
-        function updateDailyStats() {
-            const selectedDate = document.getElementById('workDate').value;
-            const data = getData();
-            
-            // 仅筛选选定日期的记录
-            const dateRecords = data.records.filter(record => record.date === selectedDate);
-            
-            // 计算总完成数量
-            const totalFinished = dateRecords.reduce((sum, record) => sum + record.finishedQuantity, 0);
-            const dailyTarget = data.settings.dailyTarget;
-            const difference = totalFinished - dailyTarget;
-            
-            // 计算工作时间
-            let totalWorkHours = 0;
-            dateRecords.forEach(record => {
-                const startParts = record.startTime.split(':');
-                const endParts = record.endTime.split(':');
-                const startDate = new Date(0, 0, 0, parseInt(startParts[0]), parseInt(startParts[1]));
-                const endDate = new Date(0, 0, 0, parseInt(endParts[0]), parseInt(endParts[1]));
-                const diff = (endDate - startDate) / (1000 * 60 * 60); // 转换为小时
-                totalWorkHours += diff;
-            });
-            
-            // 计算加班时间
-            const standardHours = data.settings.dailyHours;
-            const overtimeHours = Math.max(0, totalWorkHours - standardHours);
-            
-            // 更新显示
-            document.getElementById('totalOutput').textContent = totalFinished.toLocaleString();
-            document.getElementById('totalDifference').textContent = difference.toLocaleString();
-            document.getElementById('actualHours').textContent = totalWorkHours.toFixed(2) + '小时';
-            document.getElementById('overtimeHours').textContent = overtimeHours.toFixed(2) + '小时';
-            
-            // 更新进度条
-            const progressPercentage = Math.min(Math.round((totalFinished / dailyTarget) * 100), 100);
-            const progressBar = document.getElementById('progressBar');
-            progressBar.style.width = `${progressPercentage}%`;
-            progressBar.textContent = `${progressPercentage}%`;
-            
-            // 更新完成状态
-            const completionStatus = document.getElementById('completionStatus');
-            const displayDate = new Date(selectedDate).toLocaleDateString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-            completionStatus.textContent = `${displayDate}进度: ${totalFinished.toLocaleString()}/${dailyTarget.toLocaleString()} (${progressPercentage}%)`;
-            
-            // 根据差异设置样式
-            if (difference > 0) {
-                completionStatus.className = 'over-target';
-                document.getElementById('totalDifference').className = 'over-target';
-            } else if (difference < 0) {
-                completionStatus.className = 'under-target';
-                document.getElementById('totalDifference').className = 'under-target';
-            } else {
-                completionStatus.className = 'target-met';
-                document.getElementById('totalDifference').className = 'target-met';
-            }
-            
-            // 更新累计完成数量显示
-            document.getElementById('completed').value = totalFinished.toLocaleString();
-            
-            // 更新设置显示
-            document.getElementById('dailyTargetDisplay').textContent = dailyTarget.toLocaleString();
-            document.getElementById('dailyHoursDisplay').textContent = data.settings.dailyHours;
-        }
-        
-        // 加载历史记录
-        function loadHistory() {
-            try {
-                const data = getData();
-                const historyTable = document.getElementById('historyTable').querySelector('tbody');
+            // 编辑破损记录
+            editBrokenRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'broken';
                 
-                // 先清空表格
-                historyTable.innerHTML = '';
+                const record = this.records.broken[index];
                 
-                // 如果没有记录，显示空状态
-                if (!data.records || data.records.length === 0) {
-                    const emptyRow = document.createElement('tr');
-                    emptyRow.innerHTML = `
-                        <td colspan="4" style="text-align: center; padding: 30px;">
-                            <div class="empty-state">
-                                <i class="fas fa-inbox"></i>
-                                <p>暂无生产记录</p>
-                            </div>
-                        </td>
-                    `;
-                    historyTable.appendChild(emptyRow);
+                document.getElementById('modalBrokenQuantity').value = record.quantity;
+                document.getElementById('modalBrokenType').value = record.type;
+                document.getElementById('modalBrokenReason').value = record.reason || '';
+                
+                // 设置日期时间
+                const dateInput = document.getElementById('modalBrokenDate');
+                const dateObj = new Date(record.date);
+                const formattedDate = dateObj.toISOString().slice(0, 16);
+                dateInput.value = formattedDate;
+                
+                this.showModal('editBrokenModal');
+            }
+            
+            // 保存破损编辑
+            saveBrokenEdit() {
+                const quantity = parseInt(document.getElementById('modalBrokenQuantity').value);
+                const type = document.getElementById('modalBrokenType').value;
+                let date = document.getElementById('modalBrokenDate').value;
+                const reason = document.getElementById('modalBrokenReason').value;
+                
+                if (!date) {
+                    date = new Date().toISOString().slice(0, 16);
+                }
+                
+                if (quantity > 0) {
+                    this.records.broken[this.currentEditIndex] = {
+                        date: this.formatDateTime(date),
+                        type,
+                        quantity,
+                        reason
+                    };
+                    
+                    this.saveData();
+                    this.closeModal('editBrokenModal');
+                } else {
+                    this.showAlert('请输入有效的数量');
+                }
+            }
+            
+            // 删除入库记录
+            deleteInRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'in';
+                
+                const record = this.records.in[index];
+                
+                this.showConfirm(
+                    '确认删除',
+                    '您确定要删除这条入库记录吗？',
+                    () => {
+                        // 如果是水机，更新水机统计
+                        if (record.type === '水机') {
+                            this.machines.total -= record.quantity;
+                            this.machines.available -= record.quantity;
+                        }
+                        
+                        this.records.in.splice(index, 1);
+                        this.saveData();
+                    }
+                );
+            }
+            
+            // 删除出库记录
+            deleteOutRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'out';
+                
+                const record = this.records.out[index];
+                
+                this.showConfirm(
+                    '确认删除',
+                    '您确定要删除这条出库记录吗？',
+                    () => {
+                        // 如果是水机，更新水机统计
+                        if (record.type === '水机') {
+                            this.machines.assigned -= record.quantity;
+                            this.machines.available += record.quantity;
+                        }
+                        
+                        this.records.out.splice(index, 1);
+                        this.saveData();
+                    }
+                );
+            }
+            
+            // 删除破损记录
+            deleteBrokenRecord(index) {
+                this.currentEditIndex = index;
+                this.currentEditType = 'broken';
+                
+                const record = this.records.broken[index];
+                
+                this.showConfirm(
+                    '确认删除',
+                    '您确定要删除这条破损记录吗？',
+                    () => {
+                        // 如果是水机，更新水机统计
+                        if (record.type === '水机') {
+                            this.machines.maintenance -= record.quantity;
+                            this.machines.available += record.quantity;
+                        }
+                        
+                        this.records.broken.splice(index, 1);
+                        this.saveData();
+                    }
+                );
+            }
+            
+            // 更新统计信息
+            updateStats() {
+                // 计算总入库量
+                const totalIn = this.records.in.reduce((sum, record) => sum + record.quantity, 0);
+                document.getElementById('totalIn').textContent = totalIn;
+                
+                // 计算总出库量
+                const totalOut = this.records.out.reduce((sum, record) => sum + record.quantity, 0);
+                document.getElementById('totalOut').textContent = totalOut;
+                
+                // 计算破损总量
+                const totalBroken = this.records.broken.reduce((sum, record) => sum + record.quantity, 0);
+                document.getElementById('brokenStock').textContent = totalBroken;
+                
+                // 计算当前库存（不包括破损桶）
+                const currentStock = totalIn - totalOut - totalBroken;
+                document.getElementById('currentStock').textContent = currentStock;
+                
+                // 计算各类型库存
+                const types = ['标准桶', '550ml', '330ml', '水机'];
+                types.forEach(type => {
+                    const available = this.getAvailableStock(type);
+                    document.getElementById(`${type === '标准桶' ? 'standard' : type === '550ml' ? 'large' : type === '330ml' ? 'small' : 'custom'}Stock`).textContent = available;
+                });
+                
+                // 更新水机统计
+                document.getElementById('totalMachines').textContent = this.machines.total;
+                document.getElementById('assignedMachines').textContent = this.machines.assigned;
+                document.getElementById('availableMachines').textContent = this.machines.available;
+                document.getElementById('maintenanceMachines').textContent = this.machines.maintenance;
+            }
+            
+            // 更新入库记录表格
+            updateInRecords() {
+                const tbody = document.querySelector('#inRecords tbody');
+                tbody.innerHTML = '';
+                
+                if (this.records.in.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--gray);">暂无入库记录</td></tr>';
                     return;
                 }
                 
                 // 按日期分组
-                const recordsByDate = {};
-                data.records.forEach(record => {
-                    const recordDate = record.date || '未知日期';
-                    
-                    if (!recordsByDate[recordDate]) {
-                        recordsByDate[recordDate] = [];
-                    }
-                    recordsByDate[recordDate].push(record);
-                });
+                const grouped = this.groupRecordsByDate(this.records.in);
                 
-                // 按日期排序（从新到旧）
-                const sortedDates = Object.keys(recordsByDate).sort((a, b) => new Date(b) - new Date(a));
-                
-                // 填充表格（最多显示30天记录）
-                sortedDates.slice(0, 30).forEach(date => {
-                    const dateRecords = recordsByDate[date];
-                    // 按时间排序（从早到晚）
-                    dateRecords.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
+                    const records = grouped[date];
+                    const total = records.reduce((sum, record) => sum + record.quantity, 0);
+                    const isExpanded = this.expandedDays.has(`in-${date}`);
                     
-                    const totalFinished = dateRecords.reduce((sum, record) => sum + record.finishedQuantity, 0);
-                    const dailyTarget = data.settings.dailyTarget;
-                    const difference = totalFinished - dailyTarget;
+                    const row = document.createElement('tr');
                     
-                    // 日期行
-                    const dateRow = document.createElement('tr');
-                    dateRow.className = 'date-row';
-                    dateRow.innerHTML = `
-                        <td>${formatDate(date)}</td>
-                        <td>${totalFinished.toLocaleString()}</td>
-                        <td class="${difference > 0 ? 'over-target' : difference < 0 ? 'under-target' : 'target-met'}">
-                            ${difference.toLocaleString()}
-                        </td>
-                        <td class="actions">
-                            <button class="action-btn delete" data-date="${date}">
-                                <i class="fas fa-trash-alt"></i> 删除
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${total}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="waterBucketManager.toggleDayDetails('in', '${date}')">
+                                ${isExpanded ? '收起' : '展开'}
                             </button>
                         </td>
                     `;
-                    historyTable.appendChild(dateRow);
                     
-                    // 详情行
-                    const detailRow = document.createElement('tr');
-                    detailRow.className = 'detail-row';
-                    const detailCell = document.createElement('td');
-                    detailCell.colSpan = 4;
+                    tbody.appendChild(row);
                     
-                    let detailsHtml = `
-                        <table class="detail-table">
-                            <thead>
-                                <tr>
-                                    <th>产品名称</th>
-                                    <th>模切数量</th>
-                                    <th>调整时间(小时)</th>
-                                    <th>开机时间</th>
-                                    <th>完成时间</th>
-                                    <th style="text-align: right;">操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    `;
-                    
-                    dateRecords.forEach(record => {
-                        detailsHtml += `
-                            <tr>
-                                <td>${record.productName || '无名称'}</td>
-                                <td>${record.plannedQuantity.toLocaleString()}</td>
-                                <td>${record.adjustmentHours.toFixed(2)}</td>
-                                <td>${record.startTime || '未知'}</td>
-                                <td>${record.endTime || '未知'}</td>
-                                <td class="detail-actions">
-                                    <button class="detail-delete-btn" data-id="${record.id}">
-                                        <i class="fas fa-trash-alt"></i> 删除
-                                    </button>
-                                </td>
-                            </tr>
+                    // 添加详细记录行
+                    if (isExpanded) {
+                        const detailRow = document.createElement('tr');
+                        detailRow.className = 'detail-row';
+                        detailRow.innerHTML = `
+                            <td colspan="3">
+                                <div class="daily-details" style="display: block;">
+                                    ${records.map((record, index) => `
+                                        <div class="daily-detail-item">
+                                            <div class="record-info">
+                                                <span class="record-type">${record.type}</span>
+                                                <span class="record-quantity">${record.quantity}桶</span>
+                                                <span class="record-time">${record.date.split(' ')[1].substring(0,5)}</span>
+                                                ${record.note ? `<div class="record-note">备注: ${record.note}</div>` : ''}
+                                            </div>
+                                            <div class="record-actions">
+                                                <button class="btn btn-primary btn-sm" onclick="waterBucketManager.editInRecord(${index})">编辑</button>
+                                                <button class="btn btn-danger btn-sm" onclick="waterBucketManager.deleteInRecord(${index})">删除</button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </td>
                         `;
-                    });
+                        tbody.appendChild(detailRow);
+                    }
+                });
+            }
+            
+            // 更新出库记录表格
+            updateOutRecords() {
+                const tbody = document.querySelector('#outRecords tbody');
+                tbody.innerHTML = '';
+                
+                if (this.records.out.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--gray);">暂无出库记录</td></tr>';
+                    return;
+                }
+                
+                // 按日期分组
+                const grouped = this.groupRecordsByDate(this.records.out);
+                
+                Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
+                    const records = grouped[date];
+                    const total = records.reduce((sum, record) => sum + record.quantity, 0);
+                    const isExpanded = this.expandedDays.has(`out-${date}`);
                     
-                    detailsHtml += `
-                            </tbody>
-                        </table>
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${total}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="waterBucketManager.toggleDayDetails('out', '${date}')">
+                                ${isExpanded ? '收起' : '展开'}
+                            </button>
+                        </td>
                     `;
                     
-                    detailCell.innerHTML = detailsHtml;
-                    detailRow.appendChild(detailCell);
-                    historyTable.appendChild(detailRow);
+                    tbody.appendChild(row);
                     
-                    // 添加点击事件
-                    dateRow.addEventListener('click', function() {
-                        const detailRow = this.nextElementSibling;
-                        if (detailRow.style.display === 'table-row') {
-                            detailRow.style.display = 'none';
-                        } else {
-                            detailRow.style.display = 'table-row';
-                        }
-                    });
-                    
-                    // 添加日期删除按钮事件
-                    const deleteBtn = dateRow.querySelector('.action-btn.delete');
-                    deleteBtn.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        if (confirm(`确定要删除 ${formatDate(date)} 的所有记录吗？`)) {
-                            deleteRecordsByDate(date);
-                        }
-                    });
-                    
-                    // 添加单条记录删除按钮事件
-                    detailRow.querySelectorAll('.detail-delete-btn').forEach(btn => {
-                        btn.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            const recordId = parseInt(this.getAttribute('data-id'));
-                            if (confirm('确定要删除这条记录吗？')) {
-                                deleteRecordById(recordId);
-                            }
-                        });
-                    });
+                    // 添加详细记录行
+                    if (isExpanded) {
+                        const detailRow = document.createElement('tr');
+                        detailRow.className = 'detail-row';
+                        detailRow.innerHTML = `
+                            <td colspan="3">
+                                <div class="daily-details" style="display: block;">
+                                    ${records.map((record, index) => `
+                                        <div class="daily-detail-item">
+                                            <div class="record-info">
+                                                <span class="record-type">${record.type}</span>
+                                                <span class="record-quantity">${record.quantity}桶</span>
+                                                <span class="record-time">${record.date.split(' ')[1].substring(0,5)}</span>
+                                                ${record.customer ? `<div class="record-customer">客户: ${record.customer}</div>` : ''}
+                                                ${record.note ? `<div class="record-note">备注: ${record.note}</div>` : ''}
+                                            </div>
+                                            <div class="record-actions">
+                                                <button class="btn btn-primary btn-sm" onclick="waterBucketManager.editOutRecord(${index})">编辑</button>
+                                                <button class="btn btn-danger btn-sm" onclick="waterBucketManager.deleteOutRecord(${index})">删除</button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(detailRow);
+                    }
                 });
-            } catch (e) {
-                console.error('加载历史记录失败:', e);
-                showNotification('加载历史记录失败', 'error');
             }
-        }
-        
-        // 格式化时间 (HH:MM)
-        function formatTime(date) {
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            return `${hours}:${minutes}`;
-        }
-        
-        // 根据ID删除单条记录
-        function deleteRecordById(id) {
-            const data = getData();
-            const recordIndex = data.records.findIndex(record => record.id === id);
             
-            if (recordIndex !== -1) {
-                const record = data.records[recordIndex];
-                data.records.splice(recordIndex, 1);
-                saveData(data);
+            // 更新破损记录表格
+            updateBrokenRecords() {
+                const tbody = document.querySelector('#brokenRecords tbody');
+                tbody.innerHTML = '';
                 
-                // 更新显示
-                loadHistory();
-                
-                // 如果是当天记录被删除，更新统计
-                const today = new Date().toISOString().split('T')[0];
-                if (record.date === today) {
-                    updateDailyStats();
+                if (this.records.broken.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--gray);">暂无破损记录</td></tr>';
+                    return;
                 }
                 
-                showNotification('记录已删除');
-            }
-        }
-        
-        // 删除指定日期的所有记录
-        function deleteRecordsByDate(date) {
-            const data = getData();
-            data.records = data.records.filter(record => record.date !== date);
-            saveData(data);
-            loadHistory();
-            
-            // 如果是当天记录被删除，更新统计
-            const today = new Date().toISOString().split('T')[0];
-            if (date === today) {
-                updateDailyStats();
-            }
-            
-            showNotification('记录已删除');
-        }
-        
-        // 保存设置
-        function saveSettings() {
-            const dailyTarget = parseInt(document.getElementById('dailyTarget').value);
-            const dailyHours = parseInt(document.getElementById('dailyHours').value);
-            
-            if (isNaN(dailyTarget)) {
-                showNotification('请输入有效的目标产量', 'error');
-                return;
-            }
-            
-            if (isNaN(dailyHours)) {
-                showNotification('请输入有效的工作时间', 'error');
-                return;
-            }
-            
-            const data = getData();
-            data.settings.dailyTarget = dailyTarget;
-            data.settings.dailyHours = dailyHours;
-            saveData(data);
-            
-            // 更新显示
-            document.getElementById('dailyTargetDisplay').textContent = dailyTarget.toLocaleString();
-            document.getElementById('dailyHoursDisplay').textContent = dailyHours;
-            
-            // 更新统计
-            updateDailyStats();
-            
-            showNotification('设置已保存');
-        }
-        
-        // 导出数据为Excel
-        function exportData() {
-            const data = getData();
-            const recordsByDate = {};
-            
-            // 按日期分组
-            data.records.forEach(record => {
-                const recordDate = record.date || '未知日期';
+                // 按日期分组
+                const grouped = this.groupRecordsByDate(this.records.broken);
                 
-                if (!recordsByDate[recordDate]) {
-                    recordsByDate[recordDate] = [];
-                }
-                recordsByDate[recordDate].push(record);
-            });
-            
-            // 准备Excel数据
-            const excelData = [
-                ['日期', '产品名称', '模切数量', '调整时间(小时)', '开机时间', '完成时间']
-            ];
-            
-            // 按日期排序（从新到旧）
-            Object.keys(recordsByDate).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
-                const dateRecords = recordsByDate[date];
-                // 按时间排序（从早到晚）
-                dateRecords.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-                
-                dateRecords.forEach(record => {
-                    const row = [
-                        formatDate(date),
-                        record.productName || '',
-                        record.plannedQuantity,
-                        record.adjustmentHours,
-                        record.startTime || '',
-                        record.endTime || ''
-                    ];
-                    excelData.push(row);
+                Object.keys(grouped).sort((a, b) => new Date(b) - new Date(a)).forEach(date => {
+                    const records = grouped[date];
+                    const total = records.reduce((sum, record) => sum + record.quantity, 0);
+                    const isExpanded = this.expandedDays.has(`broken-${date}`);
+                    
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${date}</td>
+                        <td>${total}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="waterBucketManager.toggleDayDetails('broken', '${date}')">
+                                ${isExpanded ? '收起' : '展开'}
+                            </button>
+                        </td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                    
+                    // 添加详细记录行
+                    if (isExpanded) {
+                        const detailRow = document.createElement('tr');
+                        detailRow.className = 'detail-row';
+                        detailRow.innerHTML = `
+                            <td colspan="3">
+                                <div class="daily-details" style="display: block;">
+                                    ${records.map((record, index) => `
+                                        <div class="daily-detail-item">
+                                            <div class="record-info">
+                                                <span class="record-type">${record.type}</span>
+                                                <span class="record-quantity">${record.quantity}桶</span>
+                                                <span class="record-time">${record.date.split(' ')[1].substring(0,5)}</span>
+                                                ${record.reason ? `<div class="record-reason">原因: ${record.reason}</div>` : ''}
+                                            </div>
+                                            <div class="record-actions">
+                                                <button class="btn btn-primary btn-sm" onclick="waterBucketManager.editBrokenRecord(${index})">编辑</button>
+                                                <button class="btn btn-danger btn-sm" onclick="waterBucketManager.deleteBrokenRecord(${index})">删除</button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(detailRow);
+                    }
                 });
-            });
+            }
             
-            // 创建工作簿
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(excelData);
-            XLSX.utils.book_append_sheet(wb, ws, "生产记录");
+            // 按日期分组记录
+            groupRecordsByDate(records) {
+                return records.reduce((groups, record) => {
+                    const date = record.date.split(' ')[0];
+                    if (!groups[date]) {
+                        groups[date] = [];
+                    }
+                    groups[date].push(record);
+                    return groups;
+                }, {});
+            }
             
-            // 导出Excel文件
-            const exportDate = new Date().toISOString().split('T')[0];
-            XLSX.writeFile(wb, `生产统计_${exportDate}.xlsx`);
-            showNotification('数据已成功导出为Excel', 'info');
-        }
-        
-        // 导出历史记录为Excel
-        function exportHistoryToExcel() {
-            exportData(); // 复用相同的导出逻辑
-        }
-        
-        // 清空数据
-        function clearData() {
-            if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
-                localStorage.removeItem('productionData');
-                localStorage.removeItem('productionData_backup');
-                initData();
-                showNotification('数据已清空');
+            // 切换某天的详细记录显示/隐藏
+            toggleDayDetails(type, date) {
+                const key = `${type}-${date}`;
+                if (this.expandedDays.has(key)) {
+                    this.expandedDays.delete(key);
+                } else {
+                    this.expandedDays.add(key);
+                }
                 
-                // 重置显示
-                document.getElementById('dailyTarget').value = 50000;
-                document.getElementById('dailyHours').value = 8;
-                updateDailyStats();
-                loadHistory();
-            }
-        }
-        
-        // 格式化日期显示
-        function formatDate(dateString) {
-            if (!dateString || dateString === '未知日期') return '未知日期';
-            
-            try {
-                const date = new Date(dateString);
-                return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-            } catch (e) {
-                return dateString; // 如果日期格式无效，返回原始字符串
-            }
-        }
-        
-        // 创建数据备份
-        function createBackup() {
-            const data = getData();
-            localStorage.setItem('productionData_backup', JSON.stringify(data));
-            showNotification('数据备份已创建');
-        }
-        
-        // 恢复数据备份
-        function restoreBackup() {
-            const backup = localStorage.getItem('productionData_backup');
-            if (!backup) {
-                showNotification('没有找到备份数据', 'error');
-                return;
+                if (type === 'in') {
+                    this.updateInRecords();
+                } else if (type === 'out') {
+                    this.updateOutRecords();
+                } else {
+                    this.updateBrokenRecords();
+                }
             }
             
-            if (confirm('确定要恢复备份数据吗？当前数据将被覆盖。')) {
-                localStorage.setItem('productionData', backup);
-                showNotification('数据已从备份恢复');
+            // 更新所有显示
+            updateAll() {
+                this.updateStats();
+                this.updateInRecords();
+                this.updateOutRecords();
+                this.updateBrokenRecords();
+            }
+            
+            // 显示模态框
+            showModal(modalId) {
+                document.getElementById(modalId).style.display = 'flex';
+            }
+            
+            // 关闭模态框
+            closeModal(modalId) {
+                document.getElementById(modalId).style.display = 'none';
+            }
+            
+            // 显示确认对话框
+            showConfirm(title, message, confirmCallback) {
+                document.getElementById('confirmModalTitle').textContent = title;
+                document.getElementById('confirmModalMessage').textContent = message;
                 
-                // 刷新显示
-                updateDailyStats();
-                loadHistory();
+                const confirmBtn = document.getElementById('confirmActionBtn');
+                confirmBtn.onclick = () => {
+                    confirmCallback();
+                    this.closeModal('confirmModal');
+                };
+                
+                this.showModal('confirmModal');
+            }
+            
+            // 显示警告
+            showAlert(message) {
+                alert(message);
+            }
+            
+            // 格式化日期时间显示
+            formatDateTime(dateTimeString, includeSeconds = false) {
+                const date = new Date(dateTimeString);
+                const year = date.getFullYear();
+                const month = this.padZero(date.getMonth() + 1);
+                const day = this.padZero(date.getDate());
+                const hours = this.padZero(date.getHours());
+                const minutes = this.padZero(date.getMinutes());
+                const seconds = includeSeconds ? `:${this.padZero(date.getSeconds())}` : '';
+                
+                return `${year}-${month}-${day} ${hours}:${minutes}${seconds}`;
+            }
+            
+            // 补零函数
+            padZero(num) {
+                return num < 10 ? `0${num}` : num;
             }
         }
+        
+        // 初始化水桶管理系统
+        const waterBucketManager = new WaterBucketManager();
     </script>
 </body>
 </html>
